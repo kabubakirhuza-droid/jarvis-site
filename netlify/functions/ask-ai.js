@@ -18,14 +18,15 @@
 
 const https = require('https');
 
-// Pinned to a stable, non-preview model with a generous free-tier daily
-// quota. The "gemini-flash-latest" alias was tried first, but it currently
-// resolves to the newest preview model (gemini-3.6-flash), which only gets
-// ~20 free requests/day — far too low for real use, and it started
-// returning 429 quota-exceeded errors almost immediately. Flash-Lite is
-// specifically the budget/high-quota tier, which fits a simple voice
-// assistant much better.
-const AI_MODEL = 'gemini-2.5-flash-lite';
+// Google's Gemini 2.5-series models (gemini-2.5-flash, gemini-2.5-flash-lite)
+// now reject brand-new API keys outright ("no longer available to new
+// users"). The "gemini-flash-latest" alias resolves to gemini-3.6-flash,
+// the newest preview model, which only gets ~20 free requests/day and hit
+// its quota almost immediately. gemini-3.5-flash is the current *stable*
+// (non-preview) Gemini 3 model — pinned here directly rather than through
+// an alias so it doesn't silently follow "latest" onto another
+// low-quota preview later.
+const AI_MODEL = 'gemini-3.5-flash';
 const AI_SYSTEM_PROMPT =
   'Ты голосовой ассистент Jarvis на телефоне. Отвечай кратко (2-4 предложения), ' +
   'разговорным языком, без markdown-разметки и списков — твой ответ будет ' +
@@ -63,13 +64,12 @@ exports.handler = async function (event) {
   const payload = JSON.stringify({
     contents: [{ parts: [{ text: question }] }],
     systemInstruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
-    // gemini-2.5-flash-lite is a 2.5-series model, so it uses the older
-    // thinkingBudget knob (0 = off), not thinkingLevel (that's for Gemini
-    // 3.x and gets rejected as an invalid argument here). Flash-Lite
-    // already defaults to no thinking, but we set it explicitly so a
-    // fast, complete answer always fits inside maxOutputTokens instead of
-    // being truncated by hidden reasoning tokens.
-    generationConfig: { maxOutputTokens: 600, thinkingConfig: { thinkingBudget: 0 } },
+    // gemini-3.5-flash defaults to "medium" thinking, which was silently
+    // eating the whole maxOutputTokens cap and truncating the spoken
+    // answer to a fragment. thinkingLevel: "minimal" keeps it fast and
+    // direct — the right knob for Gemini 3.x (thinkingBudget is the old
+    // 2.5-series knob and gets rejected as an invalid argument here).
+    generationConfig: { maxOutputTokens: 600, thinkingConfig: { thinkingLevel: 'minimal' } },
   });
 
   const path =
