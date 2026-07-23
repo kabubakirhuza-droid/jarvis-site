@@ -59,12 +59,14 @@ exports.handler = async function (event) {
   const payload = JSON.stringify({
     contents: [{ parts: [{ text: question }] }],
     systemInstruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
-    // thinkingBudget: 0 turns off internal "thinking" tokens — newer Gemini
-    // models spend output-token budget on hidden reasoning by default, which
-    // was silently eating the whole maxOutputTokens cap and truncating the
-    // actual spoken answer to a fragment. Voice replies are short anyway, so
-    // we don't need thinking, just a fast direct answer.
-    generationConfig: { maxOutputTokens: 600, thinkingConfig: { thinkingBudget: 0 } },
+    // thinkingLevel: "minimal" keeps internal "thinking" tokens as low as
+    // possible — newer Gemini 3.x models spend output-token budget on hidden
+    // reasoning by default, which was silently eating the whole
+    // maxOutputTokens cap and truncating the actual spoken answer to a
+    // fragment. Voice replies are short anyway, so we want a fast direct
+    // answer, not deep reasoning. (thinkingBudget is the old 2.5-series
+    // knob and gets rejected as an invalid argument on 3.x models.)
+    generationConfig: { maxOutputTokens: 600, thinkingConfig: { thinkingLevel: 'minimal' } },
   });
 
   const path =
