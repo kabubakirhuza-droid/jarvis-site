@@ -18,7 +18,10 @@
 
 const https = require('https');
 
-const AI_MODEL = 'gemini-2.5-flash';
+// "latest" alias auto-follows Google's current flash model, so this
+// keeps working even after Google retires a specific dated model
+// (gemini-2.5-flash was cut off for new API keys as of July 2026).
+const AI_MODEL = 'gemini-flash-latest';
 const AI_SYSTEM_PROMPT =
   'Ты голосовой ассистент Jarvis на телефоне. Отвечай кратко (2-4 предложения), ' +
   'разговорным языком, без markdown-разметки и списков — твой ответ будет ' +
