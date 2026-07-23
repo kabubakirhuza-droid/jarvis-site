@@ -1,3 +1,13 @@
 [build]
   functions = "netlify/functions"
   publish = "."
+
+  [[redirects]]
+    from = "/"
+      to = "/jarvis.html"
+        status = 200
+
+        [[redirects]]
+          from = "/app"
+            to = "/jarvis.html"
+              status = 200
