@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>J.A.R.V.I.S.</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --cyan:#3ff0ff;
+    --cyan-dim:#0e7c8c;
+    --bg:#020409;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{
+    min-height:100%;
+    background:radial-gradient(ellipse at center, #04121a 0%, #01060a 70%, #000 100%);
+    font-family:'Courier New', monospace;
+    color:var(--cyan);
+  }
+  body{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-start;
+    position:relative;
+    min-height:100vh;
+    padding:110px 16px 40px;
+  }
+
+  .grid{
+    position:fixed;inset:0;
+    background-image:
+      linear-gradient(rgba(63,240,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(63,240,255,0.05) 1px, transparent 1px);
+    background-size:40px 40px;
+    pointer-events:none;
+  }
+  .scanline{
+    position:fixed;inset:0;
+    background:linear-gradient(rgba(63,240,255,0.03) 50%, transparent 50%);
+    background-size:100% 4px;
+    pointer-events:none;
+    opacity:.2;
+  }
+
+  header{
+    position:fixed;top:16px;left:0;right:0;
+    text-align:center;
+    letter-spacing:8px;
+    font-size:14px;
+    color:var(--cyan);
+    text-shadow:0 0 10px var(--cyan);
+    z-index:5;
+  }
+  header span{opacity:.5;font-size:10px;letter-spacing:2px;display:block;margin-top:4px;}
+
+  .langbar{
+    position:fixed;top:16px;right:20px;
+    display:flex;gap:6px;z-index:6;
+  }
+  .langbar button{
+    font-size:10px;padding:4px 8px;letter-spacing:1px;
+  }
+  .langbar button.active{
+    background:var(--cyan);color:#001217;box-shadow:0 0 10px var(--cyan);
+  }
+  .clock{
+    position:fixed;top:16px;left:20px;
+    font-size:11px;letter-spacing:1px;opacity:.7;
+    text-align:left;z-index:6;
+  }
+
+  .core-wrap{
+    position:relative;
+    width:280px;height:280px;
+    display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;
+    margin-top:20px;
+  }
+  svg.rings{position:absolute;width:100%;height:100%;top:0;left:0;}
+  .ring{fill:none;stroke:var(--cyan);opacity:.6;filter:drop-shadow(0 0 4px var(--cyan));}
+  .ring1{stroke-dasharray:4 10;animation:spin 12s linear infinite;}
+  .ring2{stroke-dasharray:2 6;animation:spin 8s linear infinite reverse;opacity:.4;}
+  .ring3{animation:spin 20s linear infinite;opacity:.25;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .core{
+    width:110px;height:110px;border-radius:50%;
+    background:radial-gradient(circle at 35% 35%, #bffcff 0%, var(--cyan) 30%, var(--cyan-dim) 65%, #012 100%);
+    box-shadow:0 0 40px 8px rgba(63,240,255,.55), inset 0 0 25px rgba(0,0,0,.4);
+    position:relative;
+    transition:box-shadow .2s ease, transform .2s ease;
+  }
+  .core.listening{
+    animation:pulse 1s ease-in-out infinite;
+    box-shadow:0 0 70px 20px rgba(63,240,255,.85), inset 0 0 25px rgba(0,0,0,.3);
+  }
+  .core.speaking{
+    animation:pulse .4s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{transform:scale(1);}
+    50%{transform:scale(1.08);}
+  }
+
+  #bars{
+    position:absolute;bottom:-40px;left:50%;transform:translateX(-50%);
+    display:flex;gap:3px;align-items:flex-end;height:26px;
+  }
+  #bars div{
+    width:4px;background:var(--cyan);
+    box-shadow:0 0 6px var(--cyan);
+    height:4px;
+    transition:height .08s ease;
+  }
+
+  .status{
+    margin-top:56px;
+    font-size:12px;
+    letter-spacing:3px;
+    opacity:.85;
+    min-height:18px;
+    text-shadow:0 0 6px var(--cyan);
+    text-align:center;
+  }
+
+  .console{
+    width:min(560px,92vw);
+    height:180px;
+    margin-top:16px;
+    overflow-y:auto;
+    padding:10px 14px;
+    border:1px solid rgba(63,240,255,.3);
+    background:rgba(3,20,26,.4);
+    font-size:12.5px;
+    line-height:1.6;
+    box-shadow:inset 0 0 20px rgba(63,240,255,.08);
+  }
+  .console p{margin-bottom:4px;white-space:pre-wrap;word-break:break-word;}
+  .console .you{color:#7fffe0;}
+  .console .jarvis{color:var(--cyan);}
+  .console .sys{color:#ff9f5f;}
+  .console .you::before{content:"> ";opacity:.6;}
+  .console .jarvis::before{content:"J: ";opacity:.6;}
+  .console::-webkit-scrollbar{width:5px;}
+  .console::-webkit-scrollbar-thumb{background:var(--cyan-dim);}
+
+  /* the orb itself is the only control — no separate mic icon/button.
+     It arms itself automatically; clicking it is just a manual fallback. */
+  .core{ cursor:pointer; }
+  .core.active{
+    /* hands-free mode armed: subtle steady ring even between utterances */
+    box-shadow:0 0 50px 14px rgba(63,240,255,.7), inset 0 0 25px rgba(0,0,0,.4);
+  }
+  .core.listening-pulse{
+    /* actively capturing audio right now */
+    box-shadow:0 0 70px 20px rgba(63,240,255,.9), inset 0 0 25px rgba(0,0,0,.3);
+    animation:pulse .8s ease-in-out infinite;
+  }
+
+  .serverStatus{font-size:10px;opacity:.55;margin-top:4px;text-align:center;}
+
+  footer{
+    margin-top:30px;
+    font-size:10px;opacity:.35;letter-spacing:2px;
+    text-align:center;
+  }
+
+  @media(max-width:480px){
+    .clock{font-size:9px;}
+    .core-wrap{width:220px;height:220px;}
+    .core{width:90px;height:90px;}
+    header{font-size:11px;letter-spacing:5px;}
+  }
+</style>
+</head>
+<body>
+<div class="grid"></div>
+<div class="scanline"></div>
+
+<header id="titleText">J . A . R . V . I . S .<span id="subtitleText">ИНТЕРФЕЙС ГОЛОСОВОГО УПРАВЛЕНИЯ</span></header>
+<div class="clock" id="clock"></div>
+<div class="langbar">
+  <button data-lang="ru" class="active">RU</button>
+  <button data-lang="en">EN</button>
+  <button data-lang="uz">UZ</button>
+</div>
+
+<div class="core-wrap">
+  <svg class="rings" viewBox="0 0 200 200">
+    <circle class="ring ring3" cx="100" cy="100" r="96"/>
+    <circle class="ring ring1" cx="100" cy="100" r="80"/>
+    <circle class="ring ring2" cx="100" cy="100" r="64"/>
+  </svg>
+  <div class="core" id="core"></div>
+  <div id="bars"></div>
+</div>
+
+<div class="status" id="status">СИСТЕМА ГОТОВА</div>
+<div class="serverStatus" id="serverStatus">ЛОКАЛЬНЫЙ СЕРВЕР: ПРОВЕРКА...</div>
+
+<div class="console" id="console"></div>
+
+<footer id="footerText">STARK INDUSTRIES © — HTML / CSS / JS DEMO · build 2026-07-21.18</footer>
+
+<script>
+(function(){
+  const core = document.getElementById('core');
+  const statusEl = document.getElementById('status');
+  const consoleEl = document.getElementById('console');
+  // no separate mic icon — the glowing orb itself is the control (and it
+  // arms itself automatically on load, so normally you never need to touch
+  // anything at all; clicking the orb is just a manual fallback/retry)
+  const micBtn = core;
+  const bars = document.getElementById('bars');
+  const clockEl = document.getElementById('clock');
+  const serverStatusEl = document.getElementById('serverStatus');
+  const titleText = document.getElementById('titleText');
+  const subtitleText = document.getElementById('subtitleText');
+  const footerText = document.getElementById('footerText');
+
+  // ---------------------------------------------------------------
+  // translations
+  // ---------------------------------------------------------------
+  const UI = {
+    ru: {
+      subtitle: 'ИНТЕРФЕЙС ГОЛОСОВОГО УПРАВЛЕНИЯ',
+      ready: 'СИСТЕМА ГОТОВА',
+      listening: 'СЛУШАЮ...',
+      speaking: 'ГОВОРЮ...',
+      executing: 'ВЫПОЛНЯЮ...',
+      placeholder: 'Введите команду и нажмите Enter...',
+      serverOk: 'ЛОКАЛЬНЫЙ СЕРВЕР: ПОДКЛЮЧЁН',
+      serverOff: 'ЛОКАЛЬНЫЙ СЕРВЕР: НЕ ЗАПУЩЕН (запустите jarvis_server.py)',
+      greet: 'Все системы в норме. Джарвис к вашим услугам.',
+      langSwitched: 'Русский язык подключён.',
+      noSpeech: 'Голосовой ввод не поддерживается этим браузером. Используйте текстовое поле.',
+      micDenied: 'Доступ к микрофону запрещён. Разрешите его в настройках браузера и откройте страницу через http://127.0.0.1:5055/app.',
+      noMic: 'Микрофон не найден.',
+      recogErr: 'Ошибка распознавания речи. Попробуйте ещё раз или используйте текст.',
+      handsFreeOn: 'Режим "всегда слушаю" включён. Просто скажите "Джарвис" и команду — кнопка больше не нужна.',
+      handsFreeOff: 'Режим "всегда слушаю" выключен.',
+      unknown: (raw)=>'Я услышал: ' + raw + '. Пока не знаю такой команды.',
+      serverDown: 'Локальный сервер не запущен. Запустите jarvis_server.py на компьютере.',
+      responses: {
+        wakeAck: 'Лаббай, босс!',
+        pauseAck: 'Хорошо, молчу. Скажите «Джарвис, старт», чтобы я снова слушал.',
+        resumeAck: 'Снова на связи, босс!',
+        vibrating: 'Вибрирую.',
+        vibrateUnsupported: 'Этот браузер не поддерживает вибрацию.',
+        torchOn: 'Включаю фонарик.',
+        torchOff: 'Выключаю фонарик.',
+        torchUnsupported: 'На этом телефоне браузер не может напрямую управлять фонариком.',
+        callOpening: (n)=>'Открываю набор номера ' + n + '. Нажмите кнопку вызова, чтобы позвонить.',
+        smsOpening: (n)=>'Открываю смс для ' + n + ' с готовым текстом. Нажмите отправить.',
+        whatsappOpening: (n)=>'Открываю WhatsApp для ' + n + ', сообщение вставлено.',
+        shareOpened: 'Открываю меню «поделиться».',
+        shareUnsupported: 'На этом устройстве меню «поделиться» недоступно из браузера.',
+        clipboardCopied: 'Скопировано в буфер обмена.',
+        noSystemControl: 'Браузер не может напрямую менять системную громкость, яркость или Wi-Fi на Android — это ограничение самой системы, обойти его без установки отдельного приложения нельзя.',
+        howAreYou: 'Спасибо, босс! У меня всё отлично. А как ваши дела?',
+        mathResult: (n)=>'Будет ' + n + '.',
+        divByZero: 'На ноль делить нельзя.',
+        capabilities: 'Я умею открывать программы, папки и сайты, писать в Telegram, управлять громкостью, яркостью и Wi-Fi, ставить таймеры, считать примеры, переводить текст, узнавать время, дату, заряд батареи и свободное место на диске — и ещё много всего. Просто попросите.',
+        openingSite: (name)=>'Открываю сайт: ' + name + '.',
+        translating: (text)=>'Перевожу: ' + text,
+        weather: 'Открываю погоду.',
+        goodMorning: 'Доброе утро! Хорошего дня.',
+        goodNight: 'Спокойной ночи!',
+        whoMadeYou: 'Меня создала компания Бакрун вместе с Claude.',
+        howOld: 'Я родился только что, но чувствую себя мудрым не по годам.',
+        complimentAck: 'Спасибо, стараюсь!',
+        commandListIntro: 'Полный список команд — в консоли ниже. Их больше 150.',
+        commandListText:
+`=== ПОЛНЫЙ СПИСОК КОМАНД ===
+
+РАЗГОВОР: привет · как тебя зовут · как дела · что ты умеешь · сколько тебе лет · кто тебя создал · доброе утро · спокойной ночи · молодец · спасибо · пока · расскажи шутку
+
+ИНФОРМАЦИЯ: сколько времени · какое сегодня число · сколько будет 5 плюс 3 · переведи X на английский
+
+ИНТЕРНЕТ: открой youtube · закрой youtube · открой google · закрой вкладку · найди X · найди X на ютубе (ищет прямо на YouTube) · открой сайт X (вконтакте, инстаграм, гитхаб, википедия, яндекс, авито и любой домен) · погода
+
+TELEGRAM: напиши в телеграм [имя] [текст] · открой телеграм
+
+ПРОГРАММЫ: блокнот, калькулятор, проводник, панель управления, диспетчер задач, cmd, powershell, paint, word, excel, powerpoint, outlook, chrome, edge, firefox, spotify, steam, discord, whatsapp, skype, zoom, teams, vlc, obs, photoshop, illustrator, premiere, gimp, blender, audacity, notepad++, vs code, visual studio, winrar, 7zip, itunes, acrobat — и любое другое название через «открой …» · открой блокнот и напиши [текст] (открывает и печатает под диктовку)
+
+ПАПКИ: загрузки · документы · картинки · музыка · видео · рабочий стол · этот компьютер · корзина · temp · appdata · автозагрузка
+
+НАСТРОЙКИ WINDOWS: экран · звук · сеть · bluetooth · персонализация · обновления · конфиденциальность · батарея · аккаунты · время и язык · ночной свет · авиарежим · принтеры · хранилище и другие (всего ~30 разделов)
+
+СИСТЕМА: выключи/отключи компьютер · перезагрузи компьютер · отмени выключение · заблокируй экран · спящий режим · выйди из системы · перезапусти проводник · джарвис старт/стоп (приостановить/возобновить прослушивание)
+
+ГРОМКОСТЬ И МЕДИА: громче · тише · без звука · громкость 50 · следующий трек · предыдущий трек · пауза · останови музыку
+
+ЯРКОСТЬ: увеличь яркость · уменьши яркость · яркость 70
+
+ОКНА: закрой окно · сверни окно · разверни окно · покажи рабочий стол · переключи окно · скопируй · вставь · вырежи · отмени действие · повтори действие · выдели всё
+
+ПРОЧЕЕ: таймер на 10 минут · скриншот · очисти корзину · сколько заряда батареи · сколько места на диске · имя компьютера · мой айпи · версия windows · закрой [программа] · включи/выключи wifi`,
+        greeting: 'Здравствуйте. Чем могу быть полезен?',
+        identity: 'Я Джарвис — ваш виртуальный ассистент.',
+        time: ()=>'Сейчас ' + new Date().toLocaleTimeString('ru-RU') + '.',
+        date: ()=>'Сегодня ' + new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}) + '.',
+        openYoutube: 'Открываю YouTube.',
+        openGoogle: 'Открываю Google.',
+        search: (q)=>'Ищу: ' + q,
+        searchYoutube: (q)=>'Ищу на YouTube: ' + q,
+        closedTab: 'Закрываю.',
+        cannotClose: 'Не получилось закрыть — возможно, вкладка уже закрыта. Закройте её вручную.',
+        askRecipient: 'Кому написать в Telegram?',
+        askMessage: (name)=>'Хорошо, ' + name + '. Что написать?',
+        cancelled: 'Хорошо, отменил.',
+        thanks: 'Всегда рад помочь.',
+        bye: 'До связи. Системы переходят в режим ожидания.',
+        jokes: [
+          'Программист — это устройство, превращающее кофе в код.',
+          'Есть 10 типов людей: те, кто понимает двоичный код, и те, кто нет.',
+          'Мой любимый статус в HTTP — 418, я чайник.'
+        ]
+      }
+    },
+    en: {
+      subtitle: 'VOICE CONTROL INTERFACE',
+      ready: 'SYSTEM READY',
+      listening: 'LISTENING...',
+      speaking: 'SPEAKING...',
+      executing: 'EXECUTING...',
+      placeholder: 'Type a command and press Enter...',
+      serverOk: 'LOCAL SERVER: CONNECTED',
+      serverOff: 'LOCAL SERVER: NOT RUNNING (start jarvis_server.py)',
+      greet: 'All systems are online. Jarvis at your service.',
+      langSwitched: 'English language connected.',
+      noSpeech: 'Voice input is not supported by this browser. Please use the text field.',
+      micDenied: 'Microphone access denied. Allow it in browser settings and open the page via http://127.0.0.1:5055/app.',
+      noMic: 'No microphone found.',
+      recogErr: 'Speech recognition error. Try again or use text.',
+      handsFreeOn: 'Hands-free mode is on. Just say "Jarvis" plus your command — no button needed anymore.',
+      handsFreeOff: 'Hands-free mode is off.',
+      unknown: (raw)=>'I heard: ' + raw + '. I don’t know that command yet.',
+      serverDown: 'Local server is not running. Start jarvis_server.py on your computer.',
+      responses: {
+        wakeAck: 'Лаббай, босс!',
+        pauseAck: 'Okay, going quiet. Say "Jarvis, start" to wake me up again.',
+        resumeAck: 'Back online, boss!',
+        vibrating: 'Vibrating.',
+        vibrateUnsupported: "This browser doesn't support vibration.",
+        torchOn: 'Turning on the flashlight.',
+        torchOff: 'Turning off the flashlight.',
+        torchUnsupported: "This phone's browser can't control the flashlight directly.",
+        callOpening: (n)=>'Opening the dialer for ' + n + '. Tap call to actually dial.',
+        smsOpening: (n)=>'Opening a text message to ' + n + ' with the text ready. Tap send.',
+        whatsappOpening: (n)=>'Opening WhatsApp for ' + n + ', message pre-filled.',
+        shareOpened: 'Opening the share menu.',
+        shareUnsupported: "The share menu isn't available from the browser on this device.",
+        clipboardCopied: 'Copied to clipboard.',
+        noSystemControl: "The browser can't directly control system volume, brightness, or Wi-Fi on Android — that's an OS restriction, not something I can get around without installing a separate app.",
+        howAreYou: 'I’m doing great, boss — thanks for asking! How about you?',
+        mathResult: (n)=>'That’s ' + n + '.',
+        divByZero: 'You can’t divide by zero.',
+        capabilities: 'I can open apps, folders, and websites, message people on Telegram, control volume, brightness and Wi-Fi, set timers, do quick math, translate text, tell you the time, date, battery level and free disk space — and more. Just ask.',
+        openingSite: (name)=>'Opening website: ' + name + '.',
+        translating: (text)=>'Translating: ' + text,
+        weather: 'Opening the weather.',
+        goodMorning: 'Good morning! Have a great day.',
+        goodNight: 'Good night!',
+        whoMadeYou: 'I was created by Bakrun company together with Claude.',
+        howOld: 'I was just born, but I feel wise beyond my years.',
+        complimentAck: 'Thanks, I do try!',
+        commandListIntro: 'The full command list is in the console below — over 150 of them. Note: Windows-control commands (opening apps/settings/power actions) currently only understand Russian phrasing.',
+        commandListText:
+`=== FULL COMMAND LIST ===
+
+CONVERSATION: hello · what's your name · how are you · what can you do · how old are you · who made you · good morning · good night · good job · thanks · bye · tell me a joke
+
+INFO: what time is it · what's the date · what is 5 plus 3 · translate X to russian
+
+INTERNET: open youtube · close youtube · open google · close tab · search for X · open website X (any domain, or names like vk, instagram, github, wikipedia) · weather
+
+TELEGRAM: send telegram message (multi-step: asks who, then what to say)
+
+APPS (Russian phrasing, e.g. "открой блокнот"): notepad, calculator, explorer, control panel, task manager, cmd, powershell, paint, word, excel, powerpoint, outlook, chrome, edge, firefox, spotify, steam, discord, whatsapp, skype, zoom, teams, vlc, obs, photoshop, illustrator, premiere, gimp, blender, audacity, notepad++, vs code, visual studio, winrar, 7zip, itunes, acrobat — and any other name via "открой …"
+
+FOLDERS: downloads, documents, pictures, music, videos, desktop, this pc, recycle bin, temp, appdata, startup
+
+WINDOWS SETTINGS: display, sound, network, bluetooth, personalization, updates, privacy, battery, accounts, date & time, night light, airplane mode, printers, storage, and more (~30 sections)
+
+SYSTEM: shutdown, restart, cancel shutdown, lock screen, sleep, sign out, restart explorer
+
+VOLUME & MEDIA: volume up/down, mute, volume 50, next/previous track, play/pause, stop music
+
+BRIGHTNESS: increase/decrease brightness, brightness 70
+
+WINDOWS: close window, minimize, maximize, show desktop, switch window, copy, paste, cut, undo, redo, select all
+
+OTHER: timer for 10 minutes, screenshot, empty recycle bin, battery level, free disk space, computer name, my IP, windows version, close [app], wifi on/off`,
+        greeting: 'Hello. How can I help you?',
+        identity: 'I am Jarvis, your virtual assistant.',
+        time: ()=>'It is currently ' + new Date().toLocaleTimeString('en-US') + '.',
+        date: ()=>'Today is ' + new Date().toLocaleDateString('en-US',{day:'numeric',month:'long',year:'numeric'}) + '.',
+        openYoutube: 'Opening YouTube.',
+        openGoogle: 'Opening Google.',
+        search: (q)=>'Searching for: ' + q,
+        searchYoutube: (q)=>'Searching YouTube for: ' + q,
+        closedTab: 'Closing it.',
+        cannotClose: 'Couldn’t close it — it may already be closed. Please close it manually.',
+        askRecipient: 'Who should I message on Telegram?',
+        askMessage: (name)=>'Got it, ' + name + '. What should I say?',
+        cancelled: 'Okay, cancelled.',
+        thanks: 'Always happy to help.',
+        bye: 'Goodbye. Systems entering standby mode.',
+        jokes: [
+          'A programmer is a device that turns coffee into code.',
+          'There are 10 types of people: those who understand binary, and those who don’t.',
+          'My favorite HTTP status is 418, I’m a teapot.'
+        ]
+      }
+    },
+    uz: {
+      subtitle: 'OVOZLI BOSHQARUV INTERFEYSI',
+      ready: 'TIZIM TAYYOR',
+      listening: 'ESHITYAPMAN...',
+      speaking: 'GAPIRYAPMAN...',
+      executing: 'BAJARYAPMAN...',
+      placeholder: 'Buyruqni yozing va Enter tugmasini bosing...',
+      serverOk: 'LOKAL SERVER: ULANGAN',
+      serverOff: 'LOKAL SERVER: ISHLAMAYAPTI (jarvis_server.py ni ishga tushiring)',
+      greet: 'Barcha tizimlar ishlayapti. Jarvis xizmatingizda.',
+      langSwitched: 'Oʻzbek tili ulandi.',
+      noSpeech: 'Bu brauzer ovozli kiritishni qo‘llab-quvvatlamaydi. Matn maydonidan foydalaning.',
+      micDenied: 'Mikrofonga ruxsat berilmagan. Brauzer sozlamalarida ruxsat bering va sahifani http://127.0.0.1:5055/app orqali oching.',
+      noMic: 'Mikrofon topilmadi.',
+      recogErr: 'Nutqni aniqlashda xatolik. Qayta urinib ko‘ring yoki matn kiriting.',
+      handsFreeOn: 'Qo‘lsiz rejim yoqildi. Shunchaki "Jarvis" deb buyruq bering — endi tugma kerak emas.',
+      handsFreeOff: 'Qo‘lsiz rejim o‘chirildi.',
+      unknown: (raw)=>'Men eshitdim: ' + raw + '. Bu buyruqni hali bilmayman.',
+      serverDown: 'Lokal server ishlamayapti. Kompyuteringizda jarvis_server.py ni ishga tushiring.',
+      responses: {
+        wakeAck: 'Лаббай, босс!',
+        pauseAck: 'Xo\'p, jim bo\'laman. Yana tinglashim uchun "Jarvis, start" deng.',
+        resumeAck: 'Yana tinglayapman, boss!',
+        vibrating: 'Vibratsiya qilyapman.',
+        vibrateUnsupported: 'Bu brauzer vibratsiyani qo\'llab-quvvatlamaydi.',
+        torchOn: 'Fonarikni yoqyapman.',
+        torchOff: 'Fonarikni o\'chiryapman.',
+        torchUnsupported: 'Bu telefonda brauzer fonarikni to\'g\'ridan-to\'g\'ri boshqara olmaydi.',
+        callOpening: (n)=>n + ' uchun terish oynasini ochyapman. Qo\'ng\'iroq qilish uchun tugmani bosing.',
+        smsOpening: (n)=>n + ' uchun tayyor matnli SMS ochyapman. Yuborish tugmasini bosing.',
+        whatsappOpening: (n)=>n + ' uchun WhatsApp ochyapman, xabar tayyor.',
+        shareOpened: 'Ulashish menyusini ochyapman.',
+        shareUnsupported: 'Bu qurilmada brauzerdan ulashish menyusi mavjud emas.',
+        clipboardCopied: 'Vazifalar buferiga nusxalandi.',
+        noSystemControl: 'Brauzer Android tizimidagi ovoz balandligi, yorqinlik yoki Wi-Fi ni to\'g\'ridan-to\'g\'ri boshqara olmaydi — bu operatsion tizimning cheklovi, alohida ilova o\'rnatmasdan buni chetlab o\'tib bo\'lmaydi.',
+        howAreYou: 'Rahmat, boss! Ajoyibman. Sizning ahvolingiz qanday?',
+        mathResult: (n)=>'Javob: ' + n + '.',
+        divByZero: 'Nolga bo‘lib bo‘lmaydi.',
+        capabilities: 'Men dasturlarni, papkalarni va saytlarni ochishim, Telegramda yozishim, ovoz balandligi, yorqinlik va Wi-Fi ni boshqarishim, taymer qo‘yishim, hisob-kitob qilishim, tarjima qilishim, vaqt, sana, batareya va bo‘sh joy haqida aytishim mumkin — va yana ko‘p narsa. Shunchaki so‘rang.',
+        openingSite: (name)=>'Saytni ochyapman: ' + name + '.',
+        translating: (text)=>'Tarjima qilyapman: ' + text,
+        weather: 'Ob-havoni ochyapman.',
+        goodMorning: 'Xayrli tong! Kuningiz yaxshi o‘tsin.',
+        goodNight: 'Xayrli tun!',
+        whoMadeYou: 'Meni Bakrun kompaniyasi Claude bilan birga yaratdi.',
+        howOld: 'Men hozirgina tug‘ildim, lekin o‘zimni yoshimdan ancha dono his qilaman.',
+        complimentAck: 'Rahmat, harakat qilaman!',
+        commandListIntro: 'To‘liq buyruqlar ro‘yxati pastdagi konsolda — 150 dan ortiq. Eslatma: Windows‘ni boshqarish buyruqlari (dastur/sozlama ochish, o‘chirish va h.k.) hozircha faqat ruscha aytilganda ishlaydi.',
+        commandListText:
+`=== TO'LIQ BUYRUQLAR RO'YXATI ===
+
+SUHBAT: salom · isming nima · qandaysiz · nima qila olasan · necha yoshdasan · seni kim yaratgan · xayrli tong · xayrli tun · barakalla · rahmat · xayr · latifa ayt
+
+MA'LUMOT: soat necha · bugun nechanchi · 5 qo'shish 3 nechiga teng · X ni inglizchaga tarjima qil
+
+INTERNET: youtube ochish · youtube yopish · google ochish · vkladkani yopish · X qidir · X saytini och (istalgan domen yoki vk, instagram, github, wikipedia kabi nomlar) · ob-havo
+
+TELEGRAM: telegramda xabar yozish (bosqichma-bosqich: kimga, keyin nima deb)
+
+DASTURLAR (ruscha aytiladi, masalan "открой блокнот"): notepad, calculator, explorer, control panel, task manager, cmd, powershell, paint, word, excel, powerpoint, outlook, chrome, edge, firefox, spotify, steam, discord, whatsapp, skype, zoom, teams, vlc, obs, photoshop, illustrator, premiere, gimp, blender, audacity, notepad++, vs code, visual studio, winrar, 7zip, itunes, acrobat — va boshqa istalgan nom "открой …" orqali
+
+PAPKALAR: yuklab olinganlar, hujjatlar, rasmlar, musiqa, videolar, ish stoli, bu kompyuter, savat, temp, appdata, startup
+
+WINDOWS SOZLAMALARI: ekran, ovoz, tarmoq, bluetooth, shaxsiylashtirish, yangilanishlar, maxfiylik, batareya, hisoblar, sana va til, tungi yorug'lik, parvoz rejimi, printerlar, xotira va boshqalar (~30 bo'lim)
+
+TIZIM: o'chirish, qayta yuklash, o'chirishni bekor qilish, ekranni bloklash, uyqu rejimi, tizimdan chiqish, explorer'ni qayta ishga tushirish
+
+OVOZ VA MEDIA: ovozni oshirish/pasaytirish, ovozsiz, ovoz 50, keyingi/oldingi trek, pauza, musiqani to'xtatish
+
+YORQINLIK: yorqinlikni oshirish/pasaytirish, yorqinlik 70
+
+OYNALAR: oynani yopish, kichraytirish, kattalashtirish, ish stolini ko'rsatish, oynani almashtirish, nusxalash, joylashtirish, kesish, bekor qilish, takrorlash
+
+BOSHQA: 10 daqiqaga taymer, skrinshot, savatni tozalash, batareya darajasi, bo'sh joy, kompyuter nomi, mening IP, windows versiyasi, [dastur]ni yopish, wifi yoqish/o'chirish`,
+        greeting: 'Salom. Sizga qanday yordam bera olaman?',
+        identity: 'Men Jarvisman — sizning virtual yordamchingiz.',
+        time: ()=>'Hozir soat ' + new Date().toLocaleTimeString('en-GB') + '.',
+        date: ()=>'Bugun ' + new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) + '.',
+        openYoutube: 'YouTube ochyapman.',
+        openGoogle: 'Google ochyapman.',
+        search: (q)=>'Qidiryapman: ' + q,
+        searchYoutube: (q)=>'YouTube.da qidiryapman: ' + q,
+        closedTab: 'Yopyapman.',
+        cannotClose: 'Yopib bo‘lmadi — balki allaqachon yopilgandir. Qo‘lda yoping.',
+        askRecipient: 'Telegramda kimga yozay?',
+        askMessage: (name)=>'Xo‘p, ' + name + '. Nima deb yozay?',
+        cancelled: 'Xo‘p, bekor qildim.',
+        thanks: 'Har doim yordam berishdan xursandman.',
+        bye: 'Xayr. Tizimlar kutish rejimiga o‘tmoqda.',
+        jokes: [
+          'Dasturchi — bu qahvani kodga aylantiruvchi qurilma.',
+          '10 xil odam bor: ikkilik sanoq sistemasini tushunadiganlar va tushunmaydiganlar.',
+          'Mening sevimli HTTP holatim — 418, men choynakman.'
+        ]
+      }
+    }
+  };
+
+  // Chrome's speech engine doesn't reliably support uz-UZ for either
+  // recognition or synthesis, so we route Uzbek through tr-TR instead —
+  // Turkish is a close relative (same Latin alphabet, similar phonetics)
+  // and Chrome actually supports it, unlike Uzbek.
+  const RECOG_LANG = { ru: 'ru-RU', en: 'en-US', uz: 'tr-TR' };
+  const SYNTH_LANG_PREFIX = { ru: 'ru', en: 'en', uz: 'uz' };
+
+  let LANG = 'ru';
+  let alwaysListening = false;  // hands-free mode: no button/typing needed once armed
+  // true from the moment a command is sent to jarvis_server.py until its
+  // reply is spoken. While true, the mic must NOT auto-restart — the reply
+  // is coming any moment now and will trigger speak(), which needs the mic
+  // off first. Without this, the passive "restart after idle" logic below
+  // sees synth.speaking still false (TTS hasn't started yet, we're just
+  // waiting on the network) and re-arms the mic early, so it ends up
+  // listening right as Jarvis starts talking and hears its own voice.
+  let pendingServerReply = false;
+  // true from the moment speak() is called until its TTS audio truly ends —
+  // see speak() below for why this exists alongside pendingServerReply.
+  let micHoldOff = false;
+
+  function t(){ return UI[LANG]; }
+
+  function applyStaticText(){
+    subtitleText.textContent = t().subtitle;
+    setStatus(t().ready);
+  }
+
+  document.querySelectorAll('.langbar button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(LANG === btn.dataset.lang) return;
+      LANG = btn.dataset.lang;
+      document.querySelectorAll('.langbar button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      applyStaticText();
+      if(recognition){ recognition.lang = RECOG_LANG[LANG]; }
+      if(synth) synth.cancel(); // stop any speech using the old voice
+      speak(t().langSwitched); // confirms the new voice/language out loud
+    });
+  });
+
+  // bars visualizer
+  for(let i=0;i<20;i++){
+    const d=document.createElement('div');
+    bars.appendChild(d);
+  }
+  let barTimer=null;
+  function animateBars(on){
+    clearInterval(barTimer);
+    if(!on){
+      [...bars.children].forEach(b=>b.style.height='4px');
+      return;
+    }
+    barTimer=setInterval(()=>{
+      [...bars.children].forEach(b=>{
+        b.style.height=(4+Math.random()*26)+'px';
+      });
+    },90);
+  }
+
+  // clock
+  function tick(){
+    const now=new Date();
+    clockEl.textContent = now.toLocaleTimeString() + ' | ' + now.toLocaleDateString();
+  }
+  tick();
+  setInterval(tick,1000);
+
+  function log(who, text){
+    const p=document.createElement('p');
+    p.className=who;
+    p.textContent=text;
+    consoleEl.appendChild(p);
+    consoleEl.scrollTop=consoleEl.scrollHeight;
+  }
+
+  function setStatus(s){ statusEl.textContent = s; }
+
+  // ---------------------------------------------------------------
+  // speech synthesis — prefer a male-sounding voice per language
+  // ---------------------------------------------------------------
+  const synth = window.speechSynthesis;
+  const MALE_HINTS = ['male','david','daniel','alex','fred','george','pavel','yuri','dmitri','дмитрий','юрий','павел','mark','guy','ravshan'];
+  const MALE_PRIORITY = {
+    ru: ['pavel','павел','дмитрий','yuri','юрий'],
+    en: ['david','mark','daniel','alex','fred','george','guy'],
+    uz: ['ravshan','male']
+  };
+  let lastAnnouncedVoiceKey = null;
+
+  function pickVoice(){
+    if(!synth) return {voice:null, isMale:false, isNative:false};
+    const voices = synth.getVoices();
+    if(!voices.length) return {voice:null, isMale:false, isNative:false};
+    const prefix = SYNTH_LANG_PREFIX[LANG];
+    let pool = voices.filter(v=> v.lang && v.lang.toLowerCase().startsWith(prefix));
+    let isNative = pool.length > 0;
+    if(!pool.length) pool = voices; // no dedicated voice for this language on this system — use default
+    const priority = MALE_PRIORITY[LANG] || [];
+    let male = null;
+    for(const hint of priority){
+      male = pool.find(v=> v.name.toLowerCase().includes(hint));
+      if(male) break;
+    }
+    if(!male){
+      male = pool.find(v=> MALE_HINTS.some(h=> v.name.toLowerCase().includes(h)));
+    }
+    const chosen = male || pool[0] || voices[0];
+    return { voice: chosen, isMale: !!male, isNative };
+  }
+
+  function speak(text, onDone){
+    log('jarvis', text);
+    // safety net: whatever was pending is about to be spoken now, so the
+    // passive-restart guard above no longer needs to hold the mic back
+    pendingServerReply = false;
+    // held true from right now until the TTS truly finishes — blocks the
+    // passive "restart after idle" logic below during the gap between
+    // silencing the mic and audio actually starting to play
+    micHoldOff = true;
+
+    function beginSpeaking(){
+      if(!synth){ micHoldOff = false; setStatus(t().ready); if(onDone) onDone(); return; }
+      const u = new SpeechSynthesisUtterance(text);
+      const { voice, isMale, isNative } = pickVoice();
+      if(voice) u.voice = voice;
+      u.lang = RECOG_LANG[LANG];
+      u.rate = 0.98;
+      // real male voice found -> keep near-natural pitch; otherwise fake it
+      // by dropping the pitch of whatever voice we have to sound less feminine
+      u.pitch = isMale ? 0.85 : 0.55;
+
+      const voiceKey = LANG + ':' + (voice ? voice.name : 'none');
+      if(voiceKey !== lastAnnouncedVoiceKey){
+        lastAnnouncedVoiceKey = voiceKey;
+        if(LANG === 'uz' && !isNative && voice){
+          log('sys', 'В системе не установлен узбекский голос, поэтому текст читает голос ' + voice.name + ' — произношение будет неидеальным.');
+        } else if(voice && !isMale){
+          log('sys', 'Голос: ' + voice.name + ' — мужского голоса для этого языка не установлено, применена имитация (понижен тон).');
+        } else if(voice){
+          log('sys', 'Голос: ' + voice.name + ' (мужской).');
+        }
+      }
+
+      core.classList.add('speaking');
+      animateBars(true);
+      setStatus(t().speaking);
+      u.onend = ()=>{
+        core.classList.remove('speaking');
+        animateBars(false);
+        setStatus(t().ready);
+        micHoldOff = false;
+        // hands-free mode: resume passive wake-word listening after speaking
+        if(alwaysListening && !recognizing && recognition){
+          setTimeout(()=>{
+            if(alwaysListening && !recognizing){
+              try{ recognition.start(); }catch(err){ /* ignore */ }
+            }
+          }, 500);
+        }
+        if(onDone) onDone();
+      };
+      synth.speak(u);
+    }
+
+    // critical: make sure the mic is fully OFF before Jarvis starts talking,
+    // otherwise it hears its own voice out of the speakers and tries to
+    // treat that as a new command ("repeats its own voice" feedback loop).
+    // abort() cuts the mic immediately (stop() can keep listening briefly
+    // to finish processing whatever it already captured), and the short
+    // pause afterwards gives the audio hardware time to fully let go of
+    // the microphone before the speakers start.
+    if(recognizing && recognition){
+      try{ recognition.abort(); }catch(err){ /* ignore */ }
+      setTimeout(beginSpeaking, 200);
+    } else {
+      beginSpeaking();
+    }
+  }
+  if(synth){ synth.onvoiceschanged = ()=>{}; }
+
+  // ---------------------------------------------------------------
+  // local helper server (jarvis_server.py) — Windows control
+  // ---------------------------------------------------------------
+  const SERVER_BASE = 'http://127.0.0.1:5055';
+
+  function askLocalServer(raw){
+    setStatus(t().executing);
+    pendingServerReply = true;
+    fetch(SERVER_BASE + '/command', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({text: raw})
+    }).then(r=>r.json()).then(data=>{
+      pendingServerReply = false;
+      if(data.reply){
+        speak(data.reply);
+      } else {
+        speak(t().unknown(raw));
+      }
+    }).catch(()=>{
+      // no local server (Termux/jarvis_server.py isn't running, or this is
+      // a phone with no server at all) — fall back to the Netlify AI
+      // function, if one has been deployed, so plain questions still get
+      // a real answer instead of just failing
+      askAI(raw);
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // Netlify Function fallback (netlify/functions/ask-ai.js) — answers
+  // open-ended questions via Claude when there's no local server at all
+  // (e.g. opened straight from a link on a phone, no Termux). The API
+  // key lives in Netlify's own environment variables, never in this
+  // file, so it's safe even though jarvis.html itself is public.
+  // Only fires when askLocalServer() above couldn't reach anything.
+  // ---------------------------------------------------------------
+  const AI_ENDPOINT = '/.netlify/functions/ask-ai';
+
+  function askAI(raw){
+    if(raw.trim().split(/\s+/).length < 2){
+      // too short to be a real question — avoid burning an API call on
+      // stray noise from the passively-listening mic
+      pendingServerReply = false;
+      speak(t().unknown(raw));
+      return;
+    }
+    fetch(AI_ENDPOINT, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({question: raw})
+    }).then(r=>r.json()).then(data=>{
+      pendingServerReply = false;
+      if(data.reply){
+        speak(data.reply);
+      } else {
+        speak(t().unknown(raw));
+      }
+    }).catch(()=>{
+      pendingServerReply = false;
+      speak(t().unknown(raw));
+    });
+  }
+
+  function checkServer(){
+    fetch(SERVER_BASE + '/', {method:'GET'})
+      .then(r=>r.json())
+      .then(()=>{ serverStatusEl.textContent = t().serverOk; serverStatusEl.style.color='#3ff0ff'; })
+      .catch(()=>{ serverStatusEl.textContent = t().serverOff; serverStatusEl.style.color='#ff5f5f'; });
+  }
+  checkServer();
+  setInterval(checkServer, 8000);
+
+  // ---------------------------------------------------------------
+  // intent matching across ru / en / uz
+  // ---------------------------------------------------------------
+  const INTENTS = [
+    { key:'greeting', patterns:[/привет|здравств/, /\bhello\b|\bhi\b/, /salom|assalomu/] },
+    { key:'identity', patterns:[/как тебя зовут|кто ты/, /what.?s your name|who are you/, /ismi?ng nima|sen kimsan/] },
+    { key:'howAreYou', patterns:[/как ты|как дела|как поживаешь/, /how are you|how.?s it going/, /qandaysiz|ahvoling(iz)? qanday|qalaysan/] },
+    { key:'capabilities', patterns:[/что ты умеешь|что ты можешь|на что ты способен/, /what can you do|what are you capable of/, /nima qila olasan|imkoniyat/] },
+    { key:'weather', patterns:[/погод[аиуе]/, /\bweather\b/, /ob-?havo/] },
+    { key:'goodMorning', patterns:[/доброе утро/, /good morning/, /xayrli tong/] },
+    { key:'goodNight', patterns:[/спокойной ночи|доброй ночи/, /good night/, /xayrli tun/] },
+    { key:'whoMadeYou', patterns:[/кто тебя создал|кто тебя сделал|кто твой создатель/, /who (made|created|built) you/, /seni kim yaratgan/] },
+    { key:'howOld', patterns:[/сколько тебе лет/, /how old are you/, /necha yoshdasan/] },
+    { key:'complimentAck', patterns:[/молодец|хорошая работа|отличная работа|умница/, /good job|well done|nice work/, /barakalla|zo['‘’]r/] },
+    { key:'time', patterns:[/сколько времени|который час/, /what time is it|current time/, /soat necha|vaqt nechida/] },
+    { key:'date', patterns:[/какое сегодня число|какая сегодня дата/, /what.?s the date|today.?s date/, /bugun nechanchi|sana nima/] },
+    { key:'openYoutube', patterns:[/открой (ютуб|youtube)/, /open youtube/, /youtube.*(och)/] },
+    { key:'openGoogle', patterns:[/открой google|открой гугл/, /open google/, /google.*(och)/] },
+    { key:'closeYoutube', patterns:[/закрой (ютуб|youtube)/, /close youtube/, /youtube.*(yop)/] },
+    { key:'closeGoogle', patterns:[/закрой google|закрой гугл/, /close google/, /google.*(yop)/] },
+    { key:'closeTab', patterns:[/закрой вкладку|закрой окно браузера|закрой последнюю вкладку/, /close (the )?tab|close (the )?browser window/, /vkladkani yop|oxirgi oynani yop/] },
+    { key:'thanks', patterns:[/спасибо/, /\bthanks\b|thank you/, /rahmat/] },
+    { key:'bye', patterns:[/пока|выключись|отключись/, /\bbye\b|goodbye|shut down/, /xayr|salomat bo.?l/] },
+    { key:'joke', patterns:[/шутк|анекдот/, /\bjoke\b/, /latifa|hazil/] },
+  ];
+
+  function matchIntent(cmd){
+    for(const intent of INTENTS){
+      if(intent.patterns.some(re=>re.test(cmd))) return intent.key;
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------------------
+  // fuzzy / typo-tolerant matching — so "открой йоутубе" still opens
+  // YouTube even though it's misspelled or phonetically transliterated
+  // ---------------------------------------------------------------
+  const CYR_TO_LAT = {
+    'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'zh','з':'z',
+    'и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r',
+    'с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sch',
+    'ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'
+  };
+
+  function toLatinSkeleton(word){
+    let out = '';
+    for(const ch of word.toLowerCase()){
+      out += (ch in CYR_TO_LAT) ? CYR_TO_LAT[ch] : ch;
+    }
+    return out;
+  }
+
+  function levenshtein(a, b){
+    const dp = Array.from({length: a.length+1}, (_, i)=>[i, ...Array(b.length).fill(0)]);
+    for(let j=0;j<=b.length;j++) dp[0][j] = j;
+    for(let i=1;i<=a.length;i++){
+      for(let j=1;j<=b.length;j++){
+        dp[i][j] = a[i-1]===b[j-1]
+          ? dp[i-1][j-1]
+          : 1 + Math.min(dp[i-1][j-1], dp[i-1][j], dp[i][j-1]);
+      }
+    }
+    return dp[a.length][b.length];
+  }
+
+  function fuzzyEqual(a, b, ratio=0.45, minAbs=2){
+    if(a === b) return true;
+    const dist = levenshtein(a, b);
+    const threshold = Math.max(minAbs, Math.round(Math.max(a.length,b.length) * ratio));
+    return dist <= threshold;
+  }
+
+  function fuzzyWordMatches(word, targets){
+    const skel = toLatinSkeleton(word);
+    return targets.some(target => fuzzyEqual(skel, target) || fuzzyEqual(word, target));
+  }
+
+  // verbs are matched exactly (not fuzzily) — "открой" and "закрой" are only
+  // 2 letters apart, so fuzzy-matching them against each other backfires.
+  // Only the SITE NAME needs typo/phonetic tolerance.
+  // note: \b (word boundary) doesn't work reliably with Cyrillic in JS
+  // regex (\w is ASCII-only), so these match as plain substrings instead.
+  const OPEN_VERB_RE = /открой|открыть|открывай|запусти|запустить|запускай|включи|включить|включай|покажи|показать|вызови|вызвать|зайди|зайти|заходи|войди|войти|перейди|перейти|\bopen\b|\blaunch\b|\bstart\b|ochish|\boch\b/;
+  const CLOSE_VERB_RE = /закрой|закрыть|закрывай|заверши|завершить|\bclose\b|\byop\b|yopish/;
+
+  const FUZZY_SITES = {
+    youtube: ['youtube','ютуб'],
+    google: ['google','гугл']
+  };
+
+  function fuzzySiteIntent(cmd){
+    const words = cmd.split(/\s+/).filter(Boolean);
+    let site = null;
+    for(const w of words){
+      if(!site && fuzzyWordMatches(w, FUZZY_SITES.youtube)) site = 'youtube';
+      if(!site && fuzzyWordMatches(w, FUZZY_SITES.google)) site = 'google';
+    }
+    if(!site) return null;
+    if(CLOSE_VERB_RE.test(cmd)) return site === 'youtube' ? 'closeYoutube' : 'closeGoogle';
+    if(OPEN_VERB_RE.test(cmd)) return site === 'youtube' ? 'openYoutube' : 'openGoogle';
+    return null;
+  }
+
+  function extractSearchQuery(cmd){
+    let m = cmd.match(/найди (.+)/) || cmd.match(/поищи (.+)/);
+    if(m) return m[1];
+    m = cmd.match(/search(?: for)? (.+)/);
+    if(m) return m[1];
+    m = cmd.match(/(.+) qidir/);
+    if(m) return m[1];
+    return null;
+  }
+
+  // ---------------------------------------------------------------
+  // search specifically ON YouTube — "зайди в ютуб найди эту музыку X",
+  // "найди X на ютубе", "найди на youtube X" — takes priority over the
+  // generic Google search above whenever youtube/ютуб is mentioned.
+  // ---------------------------------------------------------------
+  function extractYoutubeSearchQuery(cmd){
+    if(!/ютуб|youtube/i.test(cmd)) return null;
+    let m = cmd.match(/(?:найди|поищи|включи|найти)\s+(.+)/i) || cmd.match(/search(?: for)?\s+(.+)/i);
+    if(!m) return null;
+    let q = m[1].trim();
+    // strip a leading/trailing mention of "youtube"/"ютуб" (with опт. в/на) from the query itself
+    q = q.replace(/^(?:в|на)?\s*(?:ютубе?|youtube)\s*/i, '').trim();
+    q = q.replace(/\s*(?:в|на)?\s*(?:ютубе?|youtube)\s*$/i, '').trim();
+    return q || null;
+  }
+
+  // ---------------------------------------------------------------
+  // open ANY website by name/domain — "открой сайт X"
+  // ---------------------------------------------------------------
+  const KNOWN_SITES = {
+    'вконтакте':'https://vk.com', 'вк ':'https://vk.com', ' vk':'https://vk.com',
+    'инстаграм':'https://instagram.com', 'instagram':'https://instagram.com',
+    'фейсбук':'https://facebook.com', 'facebook':'https://facebook.com',
+    'твиттер':'https://twitter.com', 'twitter':'https://twitter.com',
+    'википедия':'https://wikipedia.org', 'wikipedia':'https://wikipedia.org',
+    'гитхаб':'https://github.com', 'github':'https://github.com',
+    'амазон':'https://amazon.com', 'amazon':'https://amazon.com',
+    'гмайл':'https://mail.google.com', 'gmail':'https://mail.google.com', 'почта':'https://mail.google.com',
+    'реддит':'https://reddit.com', 'reddit':'https://reddit.com',
+    'нетфликс':'https://netflix.com', 'netflix':'https://netflix.com',
+    'линкедин':'https://linkedin.com', 'linkedin':'https://linkedin.com',
+    'тикток':'https://tiktok.com', 'tiktok':'https://tiktok.com',
+    'яндекс':'https://ya.ru', 'yandex':'https://ya.ru',
+    'озон':'https://ozon.ru', 'ozon':'https://ozon.ru',
+    'алиэкспресс':'https://aliexpress.com', 'aliexpress':'https://aliexpress.com',
+    'авито':'https://avito.ru', 'avito':'https://avito.ru',
+    'ютуб':'https://youtube.com', 'youtube':'https://youtube.com',
+    'гугл':'https://google.com', 'google':'https://google.com',
+    'ватсап веб':'https://web.whatsapp.com', 'whatsapp':'https://web.whatsapp.com',
+    'телеграм веб':'https://web.telegram.org',
+  };
+
+  const SITE_OPEN_RE = /(?:открой|зайди на|перейди на)\s+сайт\s+(.+)|open\s+(?:the\s+)?(?:website|site)\s+(.+)|go\s+to\s+(?:the\s+)?website\s+(.+)|(.+?)\s+saytini?\s+och/i;
+
+  function extractSiteQuery(cmd){
+    const m = cmd.match(SITE_OPEN_RE);
+    if(!m) return null;
+    return (m[1] || m[2] || m[3] || m[4] || '').trim();
+  }
+
+  function resolveSiteUrl(query){
+    const q = query.trim();
+    const noSpace = q.replace(/\s+/g, '');
+    // looks like a real domain (has a dot, no spaces) -> use it directly
+    if(/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(noSpace)){
+      return /^https?:\/\//i.test(noSpace) ? noSpace : 'https://' + noSpace;
+    }
+    const key = Object.keys(KNOWN_SITES).find(k => q.toLowerCase().includes(k.trim()));
+    if(key) return KNOWN_SITES[key];
+    // single word we don't recognize -> best-effort guess at a .com domain
+    if(/^[a-zа-яё0-9-]+$/i.test(q)){
+      const latin = toLatinSkeleton(q).replace(/[^a-z0-9-]/g, '');
+      if(latin) return 'https://' + latin + '.com';
+    }
+    return null; // couldn't resolve -> caller falls back to a search
+  }
+
+  // ---------------------------------------------------------------
+  // translate — "переведи привет на английский", "translate hello to russian"
+  // ---------------------------------------------------------------
+  const TRANSLATE_TARGET = { 'английский':'en','русский':'ru','узбекский':'uz','english':'en','russian':'ru','uzbek':'uz' };
+
+  function extractTranslate(cmd){
+    let m = cmd.match(/переведи (.+?)(?:\s+на\s+(английский|русский|узбекский))?$/i);
+    if(!m) m = cmd.match(/translate (.+?)(?:\s+(?:to|into)\s+(english|russian|uzbek))?$/i);
+    if(!m) m = cmd.match(/(.+?)\s+tarjima\s+qil/i);
+    if(!m) return null;
+    const text = m[1].trim();
+    if(!text) return null;
+    const targetWord = m[2];
+    const tl = targetWord ? (TRANSLATE_TARGET[targetWord.toLowerCase()] || 'en') : 'en';
+    return { text, tl };
+  }
+
+  // ---------------------------------------------------------------
+  // quick math — "сколько будет 5 плюс 3", "what is 10 times 4"
+  // ---------------------------------------------------------------
+  const MATH_TRIGGER_RE = /сколько будет|посчитай|вычисли|what is|calculate|necha bo.?ladi|hisobla/;
+
+  function tryMath(cmd){
+    let s = cmd
+      .replace(/плюс|plus|qo['‘’]sh(ish)?/g, '+')
+      .replace(/минус|minus|ayir(ish)?/g, '-')
+      .replace(/умножить на|умножь на|times|multiplied by|ko['‘’]paytir(ish)?/g, '*')
+      .replace(/разделить на|раздели на|divided by|bo['‘’]l(ish)?/g, '/');
+    const m = s.match(/(-?\d+(?:[.,]\d+)?)\s*([+\-*/])\s*(-?\d+(?:[.,]\d+)?)/);
+    if(!m) return undefined;
+    const a = parseFloat(m[1].replace(',', '.'));
+    const op = m[2];
+    const b = parseFloat(m[3].replace(',', '.'));
+    let result;
+    if(op === '+') result = a + b;
+    else if(op === '-') result = a - b;
+    else if(op === '*') result = a * b;
+    else if(op === '/') result = b !== 0 ? a / b : null;
+    if(result === undefined) return undefined;
+    if(result === null) return null; // division by zero
+    return Math.round(result * 10000) / 10000;
+  }
+
+  // ---------------------------------------------------------------
+  // automatic language detection — the user shouldn't have to click
+  // the RU/EN/UZ buttons; Jarvis switches based on what was typed/said
+  // ---------------------------------------------------------------
+  const UZ_MARKERS = /\b(salom|assalomu|rahmat|xayr|ochish|och|ochyapman|yop|qidir|necha|nechida|nechanchi|bugun|ismi?ng|kimsan|sen|hazil|latifa|bo['‘’]l|tili|ulandi|qanday|xizmat)\b/;
+
+  function detectLang(cmd){
+    if(/[а-яё]/i.test(cmd)) return 'ru';       // any Cyrillic letter -> Russian
+    if(UZ_MARKERS.test(cmd)) return 'uz';       // known Uzbek (Latin-script) words
+    if(/[a-z]/i.test(cmd)) return 'en';         // otherwise assume English
+    return LANG;                                // numbers/symbols only -> keep current
+  }
+
+  function switchLangSilently(newLang){
+    if(newLang === LANG) return;
+    LANG = newLang;
+    document.querySelectorAll('.langbar button').forEach(b=>{
+      b.classList.toggle('active', b.dataset.lang === LANG);
+    });
+    applyStaticText();
+    if(recognition){ recognition.lang = RECOG_LANG[LANG]; }
+  }
+
+  // ---------------------------------------------------------------
+  // track browser tabs Jarvis opened, so "close youtube" etc. works
+  // ---------------------------------------------------------------
+  const openedWindows = {};
+  let lastOpenedWindow = null;
+
+  function openTab(key, url){
+    const w = window.open(url, '_blank');
+    if(key) openedWindows[key] = w;
+    lastOpenedWindow = w;
+    return w;
+  }
+
+  function closeTab(key){
+    const w = (key && openedWindows[key]) || lastOpenedWindow;
+    const r = t().responses;
+    if(w && !w.closed){
+      w.close();
+      speak(r.closedTab);
+    } else {
+      speak(r.cannotClose);
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // multi-turn conversations — e.g. "напиши в телеграм" -> "кому?" ->
+  // "Ивану" -> "что написать?" -> "привет" -> actually sends it.
+  // ---------------------------------------------------------------
+  let pendingAction = null;
+  const CANCEL_RE = /отмена|отмени|передумал|cancel|never ?mind|bekor/;
+  const TG_TRIGGER_RE = /(напиши|отправь).*(телеграм|telegram)|(телеграм|telegram).*(напиши|отправь)|send.*telegram.*message|telegram.*message/;
+  const TG_FULL_RE = /(?:напиши|отправь)(?: сообщение)?\s+(?:в\s+)?(?:телеграм|telegram)\s+@?([a-zа-яё0-9_]+)[\s,:]+(.+)/i;
+
+  function handlePendingAction(raw, cmd){
+    const r = t().responses;
+    if(CANCEL_RE.test(cmd)){
+      pendingAction = null;
+      speak(r.cancelled);
+      return;
+    }
+    if(pendingAction.type === 'telegram_recipient'){
+      const recipient = raw.trim().replace(/^@/, '');
+      pendingAction = { type: 'telegram_message', recipient };
+      speak(r.askMessage(recipient));
+      return;
+    }
+    if(pendingAction.type === 'telegram_message'){
+      const recipient = pendingAction.recipient;
+      const message = raw.trim();
+      pendingAction = null;
+      // hand off to jarvis_server.py, which already knows how to open
+      // Telegram Desktop with this exact "напиши в телеграм X text" phrasing
+      askLocalServer(`напиши в телеграм ${recipient} ${message}`);
+      return;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // command processing
+  // ---------------------------------------------------------------
+  // ---------------------------------------------------------------
+  // phone-native actions — work straight from the browser, no Termux/
+  // local server needed. Android deliberately blocks a web page from
+  // silently controlling system volume/brightness/Wi-Fi or auto-sending
+  // SMS/calls — there's no API for that and no way around it without a
+  // companion app. These are the things a browser genuinely CAN do on
+  // its own, using standard Web APIs:
+  //   - vibration:      navigator.vibrate()
+  //   - flashlight:      MediaStreamTrack torch constraint (camera permission)
+  //   - call / sms:      tel: / sms: URI schemes (opens dialer/messages,
+  //                       user still has to tap send/call themselves —
+  //                       that's an OS security rule, not our choice)
+  //   - WhatsApp message: wa.me deep link (opens the WhatsApp app)
+  //   - share sheet:      navigator.share()
+  //   - clipboard:        navigator.clipboard.writeText()
+  // ---------------------------------------------------------------
+  let torchTrack = null;
+  async function setTorch(on){
+    try{
+      if(on){
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        const track = stream.getVideoTracks()[0];
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        if(!caps.torch){ track.stop(); return false; }
+        await track.applyConstraints({ advanced: [{ torch: true }] });
+        torchTrack = track;
+        return true;
+      } else {
+        if(torchTrack){ torchTrack.stop(); torchTrack = null; return true; }
+        return false;
+      }
+    }catch(err){ return false; }
+  }
+
+  function extractPhoneNumber(cmd){
+    const m = cmd.match(/(\+?\d[\d\s-]{5,}\d)/);
+    return m ? m[1].replace(/[\s-]/g, '') : null;
+  }
+
+  async function tryPhoneNativeAction(cmd, r){
+    if(/завибрируй|вибрация|\bvibrate\b/i.test(cmd)){
+      if(navigator.vibrate){ navigator.vibrate([200,100,200]); speak(r.vibrating); }
+      else speak(r.vibrateUnsupported);
+      return true;
+    }
+
+    if(/включи фонарик|turn on (?:the )?flashlight/i.test(cmd)){
+      const ok = await setTorch(true);
+      speak(ok ? r.torchOn : r.torchUnsupported);
+      return true;
+    }
+    if(/выключи фонарик|turn off (?:the )?flashlight/i.test(cmd)){
+      const ok = await setTorch(false);
+      speak(r.torchOff);
+      return true;
+    }
+
+    let m = cmd.match(/(?:напиши|отправь)\s+смс\s+(?:на\s+)?(\+?\d[\d\s-]{5,}\d)[\s,:]+(.+)/i);
+    if(m){
+      const number = m[1].replace(/[\s-]/g, '');
+      const text = m[2].trim();
+      location.href = 'sms:' + number + '?body=' + encodeURIComponent(text);
+      speak(r.smsOpening(number));
+      return true;
+    }
+
+    m = cmd.match(/(?:напиши|отправь)(?: сообщение)?\s+(?:в\s+)?(?:вотсап|whatsapp)\s+(?:на\s+)?(\+?\d[\d\s-]{5,}\d)[\s,:]+(.+)/i);
+    if(m){
+      const number = m[1].replace(/[\s-]/g, '');
+      const text = m[2].trim();
+      openTab('whatsapp', 'https://wa.me/' + number.replace(/^\+/, '') + '?text=' + encodeURIComponent(text));
+      speak(r.whatsappOpening(number));
+      return true;
+    }
+
+    if(/позвони/i.test(cmd)){
+      const number = extractPhoneNumber(cmd);
+      if(number){
+        location.href = 'tel:' + number;
+        speak(r.callOpening(number));
+        return true;
+      }
+    }
+
+    m = cmd.match(/^поделись\s+(.+)|^share\s+(.+)/i);
+    if(m){
+      const text = (m[1] || m[2]).trim();
+      if(navigator.share){
+        try{ await navigator.share({ text }); speak(r.shareOpened); }
+        catch(err){ /* user cancelled the share sheet — not an error */ }
+      } else {
+        speak(r.shareUnsupported);
+      }
+      return true;
+    }
+
+    m = cmd.match(/скопируй в буфер(?: обмена)?\s+(.+)/i);
+    if(m){
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        try{ await navigator.clipboard.writeText(m[1].trim()); }catch(err){ /* ignore */ }
+      }
+      speak(r.clipboardCopied);
+      return true;
+    }
+
+    // things Android simply does not let a webpage touch, no matter what
+    if(/громкост\w*|яркост\w*|wi-?fi|вайфай/i.test(cmd)){
+      speak(r.noSystemControl);
+      return true;
+    }
+
+    return false;
+  }
+
+  async function respond(raw){
+    const cmd = raw.trim().toLowerCase();
+    log('you', raw);
+    if(!cmd){ return; }
+
+    if(pendingAction){
+      handlePendingAction(raw, cmd);
+      return;
+    }
+
+    switchLangSilently(detectLang(cmd));
+
+    const r = t().responses;
+    const query = extractSearchQuery(cmd);
+    const intent = matchIntent(cmd) || fuzzySiteIntent(cmd);
+
+    if(MATH_TRIGGER_RE.test(cmd)){
+      const result = tryMath(cmd);
+      if(result !== undefined){
+        speak(result === null ? r.divByZero : r.mathResult(result));
+        return;
+      }
+    }
+
+    const siteQuery = extractSiteQuery(cmd);
+    if(siteQuery){
+      const url = resolveSiteUrl(siteQuery);
+      if(url){
+        speak(r.openingSite(siteQuery));
+        openTab('site_' + siteQuery, url);
+      } else {
+        // couldn't resolve a real URL -> just search for it instead
+        speak(r.search(siteQuery));
+        openTab('search', 'https://www.google.com/search?q=' + encodeURIComponent(siteQuery));
+      }
+      return;
+    }
+
+    const translateReq = extractTranslate(cmd);
+    if(translateReq){
+      speak(r.translating(translateReq.text));
+      openTab('translate', 'https://translate.google.com/?sl=auto&tl=' + translateReq.tl + '&text=' + encodeURIComponent(translateReq.text) + '&op=translate');
+      return;
+    }
+
+    // "напиши в телеграм ивану привет" (all in one breath) -> server handles
+    // it directly. "напиши в телеграм" / "напиши кому-то в телеграме" (no
+    // name+text yet) -> start the кому/что step-by-step conversation.
+    if(!TG_FULL_RE.test(cmd) && TG_TRIGGER_RE.test(cmd)){
+      pendingAction = { type: 'telegram_recipient' };
+      speak(r.askRecipient);
+      return;
+    }
+
+    // "зайди в ютуб найди эту музыку X" / "найди X на ютубе" — search
+    // directly on YouTube instead of a generic Google search
+    const ytQuery = extractYoutubeSearchQuery(cmd);
+    if(ytQuery){
+      speak(r.searchYoutube(ytQuery));
+      openTab('search', 'https://www.youtube.com/results?search_query=' + encodeURIComponent(ytQuery));
+      return;
+    }
+
+    if(query){
+      speak(r.search(query));
+      openTab('search', 'https://www.google.com/search?q=' + encodeURIComponent(query));
+      return;
+    }
+
+    switch(intent){
+      case 'greeting': speak(r.greeting); return;
+      case 'identity': speak(r.identity); return;
+      case 'howAreYou': speak(r.howAreYou); return;
+      case 'capabilities': speak(r.capabilities); return;
+      case 'weather': speak(r.weather); openTab('weather', 'https://www.google.com/search?q=' + encodeURIComponent('weather')); return;
+      case 'goodMorning': speak(r.goodMorning); return;
+      case 'goodNight': speak(r.goodNight); return;
+      case 'whoMadeYou': speak(r.whoMadeYou); return;
+      case 'howOld': speak(r.howOld); return;
+      case 'complimentAck': speak(r.complimentAck); return;
+      case 'time': speak(r.time()); return;
+      case 'date': speak(r.date()); return;
+      case 'openYoutube': speak(r.openYoutube); openTab('youtube', 'https://youtube.com'); return;
+      case 'openGoogle': speak(r.openGoogle); openTab('google', 'https://google.com'); return;
+      case 'closeYoutube': closeTab('youtube'); return;
+      case 'closeGoogle': closeTab('google'); return;
+      case 'closeTab': closeTab(); return;
+      case 'thanks': speak(r.thanks); return;
+      case 'bye': speak(r.bye); return;
+      case 'joke': speak(r.jokes[Math.floor(Math.random()*r.jokes.length)]); return;
+    }
+
+    // phone-native browser actions (vibrate, flashlight, call/sms, share,
+    // clipboard) — try these before assuming a local helper server exists,
+    // since on a phone without Termux there usually isn't one
+    if(await tryPhoneNativeAction(cmd, r)) return;
+
+    // everything else -> local Windows/Termux helper server, if running
+    askLocalServer(raw);
+  }
+
+  // ---------------------------------------------------------------
+  // speech recognition — hands-free wake-word mode
+  // Say "Джарвис" / "Jarvis" any time, no button, no typing.
+  // ---------------------------------------------------------------
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let armMic = function(){};
+  let disarmMic = function(){};
+  let recognizing = false;
+  let recognition = null;
+
+  const WAKE_WORD_TARGETS = ['jarvis','джарвис','жарвис','жарвиз'];
+
+  // "Джарвис, стоп" / "Jarvis, stop" — pause command processing without
+  // fully switching off the mic, so "Джарвис, старт" can still be heard
+  // later to resume. (Fully disarming via the orb stops recognition
+  // entirely, which would make a voice "start" command impossible to hear.)
+  let micPaused = false;
+  // note: \b doesn't work reliably with Cyrillic in JS regex (\w is
+  // ASCII-only), so "стоп"/"старт" use explicit non-Cyrillic-letter
+  // boundaries instead, same fix as OPEN_VERB_RE/CLOSE_VERB_RE above.
+  const PAUSE_TRIGGER_RE = /(?:^|[^а-яёa-z])стоп(?:$|[^а-яёa-z])|\bstop\b|to'?xta|тухта/i;
+  const RESUME_TRIGGER_RE = /(?:^|[^а-яёa-z])старт(?:$|[^а-яёa-z])|\bstart\b|boshla/i;
+
+  function stripWakeWord(cmd){
+    const words = cmd.split(/\s+/).filter(Boolean);
+    for(let i=0;i<words.length;i++){
+      if(fuzzyWordMatches(words[i], WAKE_WORD_TARGETS)){
+        return words.slice(i+1).join(' ').trim();
+      }
+    }
+    return null; // no wake word found at all
+  }
+
+  function handleVoiceUtterance(raw){
+    const cmd = raw.trim().toLowerCase();
+    if(!cmd) return;
+
+    if(!alwaysListening){
+      // legacy path (shouldn't normally happen, kept as a safety net)
+      respond(raw);
+      return;
+    }
+
+    const containsWakeWord = cmd.split(/\s+/).some(w => fuzzyWordMatches(w, WAKE_WORD_TARGETS));
+
+    if(containsWakeWord && PAUSE_TRIGGER_RE.test(cmd)){
+      if(!micPaused){
+        micPaused = true;
+        switchLangSilently(detectLang(cmd));
+        speak(t().responses.pauseAck);
+      }
+      return;
+    }
+    if(containsWakeWord && RESUME_TRIGGER_RE.test(cmd)){
+      if(micPaused){
+        micPaused = false;
+        switchLangSilently(detectLang(cmd));
+        speak(t().responses.resumeAck);
+      }
+      return;
+    }
+    if(micPaused){
+      // stay quiet — keep listening in the background only for "старт"/"start"
+      return;
+    }
+
+    const rest = stripWakeWord(cmd);
+    if(rest === null){
+      // no wake word said at all — that's fine, treat the whole thing as
+      // the command anyway. Saying "Джарвис" first is optional, not required.
+      respond(raw);
+    } else if(rest){
+      // "Джарвис, открой блокнот" — wake word + command in one breath
+      respond(rest);
+    } else {
+      // just "Джарвис" alone — acknowledge, then keep listening
+      switchLangSilently(detectLang(cmd));
+      speak(t().responses.wakeAck);
+    }
+  }
+
+  if(SR){
+    recognition = new SR();
+    recognition.lang = RECOG_LANG[LANG];
+    recognition.continuous = false;
+    // interim results give live feedback while you're still talking, and
+    // extra alternatives let us pick whichever guess actually contains
+    // the wake word if Chrome's top guess mis-heard it
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 3;
+
+    recognition.onstart = ()=>{
+      recognizing = true;
+      micBtn.classList.add('listening-pulse');
+      core.classList.add('listening');
+      animateBars(true);
+      setStatus(alwaysListening ? t().listening : t().ready);
+    };
+    recognition.onend = ()=>{
+      recognizing = false;
+      micBtn.classList.remove('listening-pulse');
+      core.classList.remove('listening');
+      animateBars(false);
+      if(statusEl.textContent===t().listening) setStatus(t().ready);
+      // hands-free mode: keep the mic open forever until the user turns it off —
+      // but NOT while Jarvis is currently speaking (that's what causes it to
+      // hear its own voice through the speakers). If he's talking, the
+      // speak()/onend handler will restart listening once he's done instead.
+      if(alwaysListening && !(synth && synth.speaking) && !pendingServerReply && !micHoldOff){
+        setTimeout(()=>{
+          if(alwaysListening && !recognizing && !(synth && synth.speaking) && !pendingServerReply && !micHoldOff){
+            try{ recognition.start(); }catch(err){ /* ignore */ }
+          }
+        }, 250);
+      }
+    };
+    recognition.onerror = (e)=>{
+      recognizing = false;
+      micBtn.classList.remove('listening-pulse');
+      core.classList.remove('listening');
+      animateBars(false);
+      if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
+        alwaysListening = false;
+        micBtn.classList.remove('active');
+        log('sys', t().micDenied);
+        setStatus(t().ready);
+      } else if(e.error === 'audio-capture'){
+        alwaysListening = false;
+        micBtn.classList.remove('active');
+        log('sys', t().noMic);
+        setStatus(t().ready);
+      } else if(e.error === 'no-speech' || e.error === 'aborted'){
+        // totally normal while passively waiting for the wake word —
+        // onend will already restart it, nothing to report
+      } else {
+        log('sys', t().recogErr + ' (' + e.error + ')');
+      }
+      setStatus(alwaysListening ? t().listening : t().ready);
+    };
+    recognition.onresult = (e)=>{
+      let interimText = '';
+      for(let i = e.resultIndex; i < e.results.length; i++){
+        const res = e.results[i];
+        if(res.isFinal){
+          // prefer whichever alternative actually contains the wake word,
+          // in case the top guess mis-transcribed it
+          let bestTranscript = res[0].transcript;
+          for(let k = 0; k < res.length; k++){
+            const words = res[k].transcript.trim().toLowerCase().split(/\s+/);
+            if(words.some(w => fuzzyWordMatches(w, WAKE_WORD_TARGETS))){
+              bestTranscript = res[k].transcript;
+              break;
+            }
+          }
+          handleVoiceUtterance(bestTranscript);
+        } else {
+          interimText += res[0].transcript;
+        }
+      }
+      if(interimText.trim()){
+        setStatus(t().listening + ' "' + interimText.trim() + '"');
+      }
+    };
+
+    armMic = function(silent){
+      alwaysListening = true;
+      micBtn.classList.add('active');
+      if(!silent) log('sys', t().handsFreeOn);
+      if(!recognizing){
+        try{ recognition.start(); }catch(err){ /* already running, or blocked — onerror will report it */ }
+      }
+    };
+    disarmMic = function(){
+      alwaysListening = false;
+      micBtn.classList.remove('active');
+      log('sys', t().handsFreeOff);
+      if(recognizing) recognition.stop();
+    };
+
+    // the orb doubles as a manual on/off switch, in case auto-arm below
+    // gets blocked (e.g. mic permission was previously denied)
+    micBtn.addEventListener('click', ()=>{
+      if(alwaysListening) disarmMic(); else armMic(false);
+    });
+  } else {
+    micBtn.addEventListener('click', ()=>{
+      speak(t().noSpeech);
+    });
+    micBtn.style.opacity = '.4';
+  }
+
+  // surface ANY uncaught error into the visible on-screen console, not just
+  // the browser's DevTools console — so problems are visible without F12
+  window.onerror = function(message, source, lineno, colno, error){
+    try{
+      log('sys', 'JS ERROR: ' + message + ' (line ' + lineno + ')');
+    }catch(e){ /* logging itself failed — nothing more we can do */ }
+    return false;
+  };
+
+  applyStaticText();
+
+  // greeting on load, then arm the mic automatically — no click needed.
+  // The very first time, Chrome will show its own "allow microphone?"
+  // popup; after you approve it once, it's remembered for this page and
+  // every future visit starts listening on its own.
+  window.addEventListener('load', ()=>{
+    setTimeout(()=>{
+      speak(t().greet, ()=>{ if(SR){ armMic(true); } });
+    }, 600);
+  });
+})();
+</script>
+</body>
+</html>
