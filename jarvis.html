@@ -201,7 +201,7 @@
 
 <div class="console" id="console"></div>
 
-<footer id="footerText">STARK INDUSTRIES © — HTML / CSS / JS DEMO · build 2026-07-21.18</footer>
+<footer id="footerText">STARK INDUSTRIES © — HTML / CSS / JS DEMO · build 2026-07-23.19</footer>
 
 <script>
 (function(){
@@ -660,7 +660,12 @@ BOSHQA: 10 daqiqaga taymer, skrinshot, savatni tozalash, batareya darajasi, bo's
       core.classList.add('speaking');
       animateBars(true);
       setStatus(t().speaking);
-      u.onend = ()=>{
+
+      let finished = false;
+      function finishOnce(){
+        if(finished) return;
+        finished = true;
+        clearTimeout(watchdog);
         core.classList.remove('speaking');
         animateBars(false);
         setStatus(t().ready);
@@ -674,8 +679,29 @@ BOSHQA: 10 daqiqaga taymer, skrinshot, savatni tozalash, batareya darajasi, bo's
           }, 500);
         }
         if(onDone) onDone();
-      };
-      synth.speak(u);
+      }
+      u.onend = finishOnce;
+      u.onerror = finishOnce;
+
+      // safety net: some mobile browsers (notably Chrome on Android before
+      // any user tap has happened on the page) can silently swallow
+      // speechSynthesis.speak() — it never actually plays and onend never
+      // fires. Without this, the UI would freeze on "ГОВОРЮ..." forever
+      // and the mic would never re-arm ("он не заканчивает, звука нету").
+      // Estimate a generous max duration from the text length and force
+      // cleanup if we blow past it.
+      const estMs = Math.min(15000, Math.max(4000, text.length * 90));
+      const watchdog = setTimeout(finishOnce, estMs);
+
+      // clear any stuck/queued utterance from a previous failed attempt
+      // before starting this one, otherwise it silently queues up behind
+      // the jam and never plays either
+      try{ synth.cancel(); }catch(err){ /* ignore */ }
+      try{
+        synth.speak(u);
+      }catch(err){
+        finishOnce();
+      }
     }
 
     // critical: make sure the mic is fully OFF before Jarvis starts talking,
