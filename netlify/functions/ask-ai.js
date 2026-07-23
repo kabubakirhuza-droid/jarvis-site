@@ -18,10 +18,14 @@
 
 const https = require('https');
 
-// "latest" alias auto-follows Google's current flash model, so this
-// keeps working even after Google retires a specific dated model
-// (gemini-2.5-flash was cut off for new API keys as of July 2026).
-const AI_MODEL = 'gemini-flash-latest';
+// Pinned to a stable, non-preview model with a generous free-tier daily
+// quota. The "gemini-flash-latest" alias was tried first, but it currently
+// resolves to the newest preview model (gemini-3.6-flash), which only gets
+// ~20 free requests/day — far too low for real use, and it started
+// returning 429 quota-exceeded errors almost immediately. Flash-Lite is
+// specifically the budget/high-quota tier, which fits a simple voice
+// assistant much better.
+const AI_MODEL = 'gemini-2.5-flash-lite';
 const AI_SYSTEM_PROMPT =
   'Ты голосовой ассистент Jarvis на телефоне. Отвечай кратко (2-4 предложения), ' +
   'разговорным языком, без markdown-разметки и списков — твой ответ будет ' +
@@ -59,14 +63,13 @@ exports.handler = async function (event) {
   const payload = JSON.stringify({
     contents: [{ parts: [{ text: question }] }],
     systemInstruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
-    // thinkingLevel: "minimal" keeps internal "thinking" tokens as low as
-    // possible — newer Gemini 3.x models spend output-token budget on hidden
-    // reasoning by default, which was silently eating the whole
-    // maxOutputTokens cap and truncating the actual spoken answer to a
-    // fragment. Voice replies are short anyway, so we want a fast direct
-    // answer, not deep reasoning. (thinkingBudget is the old 2.5-series
-    // knob and gets rejected as an invalid argument on 3.x models.)
-    generationConfig: { maxOutputTokens: 600, thinkingConfig: { thinkingLevel: 'minimal' } },
+    // gemini-2.5-flash-lite is a 2.5-series model, so it uses the older
+    // thinkingBudget knob (0 = off), not thinkingLevel (that's for Gemini
+    // 3.x and gets rejected as an invalid argument here). Flash-Lite
+    // already defaults to no thinking, but we set it explicitly so a
+    // fast, complete answer always fits inside maxOutputTokens instead of
+    // being truncated by hidden reasoning tokens.
+    generationConfig: { maxOutputTokens: 600, thinkingConfig: { thinkingBudget: 0 } },
   });
 
   const path =
@@ -100,7 +103,18 @@ exports.handler = async function (event) {
               if (text) {
                 resolve(text.trim());
               } else if (parsed.error) {
-                resolve('ИИ вернул ошибку: ' + parsed.error.message);
+                // Quota/rate-limit errors come back as a long English
+                // paragraph full of URLs — bad to read aloud with TTS and
+                // it was also long enough to sometimes stall mobile speech
+                // synthesis. Give a short spoken-friendly Russian message
+                // instead, and keep any other error short too.
+                const code = parsed.error.code || res.statusCode;
+                if (code === 429) {
+                  resolve('Превышен дневной лимит бесплатных запросов к ИИ. Попробуйте ещё раз через минуту.');
+                } else {
+                  const short = String(parsed.error.message || '').split('\n')[0].slice(0, 150);
+                  resolve('ИИ вернул ошибку: ' + short);
+                }
               } else {
                 resolve('ИИ вернул неожиданный ответ.');
               }
