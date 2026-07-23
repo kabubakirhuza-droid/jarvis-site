@@ -4,9 +4,13 @@
 // a phone with NO Termux/local server, WITHOUT ever exposing the API key
 // to the browser. The key lives only in Netlify's own environment
 // variable settings (Site configuration -> Environment variables ->
-// ANTHROPIC_API_KEY), never in this file or in jarvis.html, so it can't
+// GEMINI_API_KEY), never in this file or in jarvis.html, so it can't
 // be read from "view source" the way it could if it were embedded
 // client-side.
+//
+// Uses Google Gemini because it has a genuinely free tier (no credit
+// card, no expiration, 1500 requests/day on Flash models) — unlike most
+// other providers. Get a free key at https://aistudio.google.com/apikey
 //
 // Uses Node's built-in https module only — no npm install / package.json
 // needed, matching the same "no extra dependencies" approach as the
@@ -14,7 +18,11 @@
 
 const https = require('https');
 
-const AI_MODEL = 'claude-haiku-4-5-20251001';
+const AI_MODEL = 'gemini-2.5-flash';
+const AI_SYSTEM_PROMPT =
+  'Ты голосовой ассистент Jarvis на телефоне. Отвечай кратко (2-4 предложения), ' +
+  'разговорным языком, без markdown-разметки и списков — твой ответ будет ' +
+  'прочитан вслух синтезатором речи.';
 
 exports.handler = async function (event) {
   if (event.httpMethod !== 'POST') {
@@ -31,36 +39,37 @@ exports.handler = async function (event) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing question' }) };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        reply: 'Ключ ИИ не настроен в Netlify. Добавьте переменную ANTHROPIC_API_KEY в настройках сайта (Site configuration -> Environment variables) и передеплойте.',
+        reply:
+          'Ключ ИИ не настроен в Netlify. Добавьте переменную GEMINI_API_KEY в настройках сайта ' +
+          '(Site configuration -> Environment variables) со значением вашего бесплатного ключа ' +
+          'с aistudio.google.com/apikey, и передеплойте.',
       }),
     };
   }
 
   const payload = JSON.stringify({
-    model: AI_MODEL,
-    max_tokens: 400,
-    system:
-      'Ты голосовой ассистент Jarvis на телефоне. Отвечай кратко (2-4 предложения), ' +
-      'разговорным языком, без markdown-разметки и списков — твой ответ будет ' +
-      'прочитан вслух синтезатором речи.',
-    messages: [{ role: 'user', content: question }],
+    contents: [{ parts: [{ text: question }] }],
+    systemInstruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
+    generationConfig: { maxOutputTokens: 400 },
   });
+
+  const path =
+    '/v1beta/models/' + AI_MODEL + ':generateContent?key=' + encodeURIComponent(apiKey);
 
   try {
     const reply = await new Promise((resolve, reject) => {
       const req = https.request(
-        'https://api.anthropic.com/v1/messages',
         {
+          hostname: 'generativelanguage.googleapis.com',
+          path,
           method: 'POST',
           headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
             'content-type': 'application/json',
             'content-length': Buffer.byteLength(payload),
           },
@@ -71,8 +80,15 @@ exports.handler = async function (event) {
           res.on('end', () => {
             try {
               const parsed = JSON.parse(data);
-              if (parsed.content && parsed.content[0] && parsed.content[0].text) {
-                resolve(parsed.content[0].text.trim());
+              const text = parsed &&
+                parsed.candidates &&
+                parsed.candidates[0] &&
+                parsed.candidates[0].content &&
+                parsed.candidates[0].content.parts &&
+                parsed.candidates[0].content.parts[0] &&
+                parsed.candidates[0].content.parts[0].text;
+              if (text) {
+                resolve(text.trim());
               } else if (parsed.error) {
                 resolve('ИИ вернул ошибку: ' + parsed.error.message);
               } else {
